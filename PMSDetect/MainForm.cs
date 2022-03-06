@@ -46,7 +46,7 @@ namespace PMSDetect
             thread.Start();
         }
 
-        private void changeCurrentlyPlaying(string currentlyPlaying)
+        private void changeCurrentlyPlaying(PlexVideoMetaData currentlyPlaying)
         {
             if (InvokeRequired)
             {
@@ -54,8 +54,11 @@ namespace PMSDetect
             }
             else
             {
-                this.Text = currentlyPlaying;
-                currentlyPlayingLabel.Text = currentlyPlaying;
+                string status = currentlyPlaying.isPlaying ? "Playing" : "Paused";
+                this.Text = currentlyPlaying.title;
+                currentlyPlayingLabel.Text = currentlyPlaying.title;
+                userLabel.Text = "User: " + currentlyPlaying.user;
+                statusLabel.Text = "Status: " + status;
             }
         }
 
@@ -65,7 +68,7 @@ namespace PMSDetect
         {
             while(true)
             {
-                string currentlyPlaying = PlexAPI.getCurrentlyPlaying();
+                PlexVideoMetaData currentlyPlaying = PlexAPI.getCurrentlyPlaying();
                 changeCurrentlyPlaying(currentlyPlaying);
                 Thread.Sleep(1000);
             }

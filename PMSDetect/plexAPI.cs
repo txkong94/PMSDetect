@@ -1,10 +1,31 @@
 ﻿using System;
+using System.Collections.Generic;
 using System.Net.Http;
 using System.Xml;
+using System.Linq;
 
 
 namespace PMSDetect
 {
+        public struct PlexVideoMetaData
+        {
+            public PlexVideoMetaData(string title, string user, bool isPlaying, int addedIndex)
+            {
+                this.title = title;
+                this.user = user;
+                this.isPlaying = isPlaying;
+                this.addedIndex = addedIndex;
+            }
+
+            public string title { get; }
+            public string user { get; }
+            public bool isPlaying { get; }
+            // Lower index = newer stream.
+            public int addedIndex { get; }
+
+
+        }
+
     class PlexAPI
     {
 
@@ -17,7 +38,7 @@ namespace PMSDetect
         public static HttpClient client = new HttpClient();
 
 
-        public static string getCurrentlyPlaying()
+        public static PlexVideoMetaData getCurrentlyPlaying()
         {
             if(client.BaseAddress == null)
             {
@@ -35,45 +56,50 @@ namespace PMSDetect
                 XmlDocument doc = new XmlDocument();
                 doc.LoadXml(result);
 
-                if (doc.SelectSingleNode("MediaContainer").Attributes.GetNamedItem("size").Value == "0") return "";
-
+                if (doc.SelectSingleNode("MediaContainer").Attributes.GetNamedItem("size").Value == "0") return new PlexVideoMetaData("", "", false, 0);
 
                 var videoNodes = doc.SelectNodes("MediaContainer/Video");
-                XmlNode selectedNode = null;
-                int addedAt = 0;
 
+                List <PlexVideoMetaData> videos = new List<PlexVideoMetaData>();
+                int index = 0;
                 foreach(XmlNode videoNode in videoNodes)
                 {
-                    string server = videoNode.SelectSingleNode("Player").Attributes.GetNamedItem("title").Value;
-                    string machineIdentifier = videoNode.SelectSingleNode("Player").Attributes.GetNamedItem("machineIdentifier").Value;
                     string user = videoNode.SelectSingleNode("User").Attributes.GetNamedItem("title").Value;
-                    int addedTime = Convert.ToInt32(videoNode.Attributes.GetNamedItem("addedAt").Value);
-                    if (server == serverName && machineIdentifier == machineId && user == userName && addedTime > addedAt)
+
+                    if (user != userName)
                     {
-                        selectedNode = videoNode;
-                        addedAt = addedTime;
+                        continue;
                     }
+
+
+                    //string server = videoNode.SelectSingleNode("Player").Attributes.GetNamedItem("title").Value;
+                    //string machineIdentifier = videoNode.SelectSingleNode("Player").Attributes.GetNamedItem("machineIdentifier").Value;
+                    bool isPlaying = videoNode.SelectSingleNode("Player").Attributes.GetNamedItem("state").Value == "playing";
+
+                    string type = videoNode.Attributes.GetNamedItem("type").Value;
+                    string title;
+
+                    if (type == "episode")
+                    {
+                        title = videoNode.Attributes.GetNamedItem("grandparentTitle").Value + " - " + videoNode.Attributes.GetNamedItem("index").Value.PadLeft(2, '0');
+                    }
+                    else
+                    {
+                        title = videoNode.Attributes.GetNamedItem("title").Value;
+                    }
+
+                    videos.Add(new PlexVideoMetaData(title, user, isPlaying, index));
+                    index++;
                 }
+                Console.WriteLine(videos.Count);
+                if (videos.Count == 0) return new PlexVideoMetaData("", "", false, 0);
 
-                if (selectedNode == null) return "";
-
-                string type = selectedNode.Attributes.GetNamedItem("type").Value;
-                string seriesName;
-
-                if(type == "episode")
-                {
-                    seriesName = selectedNode.Attributes.GetNamedItem("grandparentTitle").Value + " - " + selectedNode.Attributes.GetNamedItem("index").Value.PadLeft(2, '0');
-                }
-                else
-                {
-                    seriesName = selectedNode.Attributes.GetNamedItem("title").Value;
-                }
-
-                return seriesName;
+                return videos.OrderByDescending(video => video.isPlaying).ThenBy(video => video.addedIndex).First();
             }
             else
             {
-                return String.Format("{0} ({1})", (int)response.StatusCode, response.ReasonPhrase);
+                string error = String.Format("{0} ({1})", (int)response.StatusCode, response.ReasonPhrase);
+                return new PlexVideoMetaData(error, error, false, 0);
             }
         }
 
